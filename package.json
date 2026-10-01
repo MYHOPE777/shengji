@@ -1,6 +1,6 @@
 {
   "name": "video-audio-transcriber",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "视频音频转文本工作台后端",
   "main": "server.js",
