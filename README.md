@@ -1,5 +1,7 @@
 # 视频音频转文本工作台
 
+当前版本：**v1.0.0**
+
 这是一个单用户本地部署的中文视频转写工作台：先用 FFmpeg 从视频中提取 16 kHz、单声道 WAV，再通过阿里云 OSS 临时地址提交 FileTrans 录音文件识别。结果可人工校对并导出 TXT、SRT、VTT 或 JSON。
 
 ## 运行环境
@@ -46,3 +48,16 @@ npm test
 ```
 
 测试覆盖时间码、四种导出格式、重叠片段去重、选项归一化和阿里云结果映射。未配置云端时可直接在演示模式验证完整前端流程。
+
+## GitHub 更新
+
+首次配置远程仓库后，后续更新依次执行：
+
+git add .
+git commit -m "描述本次更新"
+git push origin main
+
+发布新版本时同步更新 package.json 中的 version，并创建版本标签：
+
+git tag -a v1.0.1 -m "v1.0.1"
+git push origin v1.0.1
