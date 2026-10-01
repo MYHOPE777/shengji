@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>声迹 · 视频音频转文本</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            ink: '#12201f',
+            paper: '#f6f8f5',
+            mint: '#20a080',
+            clay: '#d86e49',
+            line: '#dbe3df'
+          },
+          fontFamily: { sans: ['Inter', 'PingFang SC', 'Microsoft YaHei', 'sans-serif'] }
+        }
+      }
+    }
+  </script>
+  <style>
+    :root { color-scheme: light; }
+    body { background: #f6f8f5; color: #12201f; }
+    * { scrollbar-width: thin; scrollbar-color: #bbc9c4 transparent; }
+    .drop-active { border-color: #20a080 !important; background: #eaf7f2 !important; }
+    .progress-line { transition: width .45s ease; }
+    .segment-row mark { background: #ffe99d; border-radius: 3px; padding: 0 2px; }
+    .segment-row.is-low { border-left-color: #d86e49; background: #fffaf5; }
+    .segment-row.is-selected { border-left-color: #20a080; background: #f0faf6; }
+    textarea { resize: vertical; }
+    .focus-ring:focus { outline: 3px solid rgba(32, 160, 128, .22); outline-offset: 1px; }
+    .switch input:checked + span { background: #20a080; }
+    .switch input:checked + span:after { transform: translateX(18px); }
+    .switch span:after { content: ''; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; background: white; border-radius: 999px; transition: transform .2s; }
+    .meter { background: linear-gradient(90deg, #20a080 0%, #20a080 var(--value), #e6eeeb var(--value), #e6eeeb 100%); }
+  </style>
+</head>
+<body class="min-h-screen font-sans antialiased">
+  <header class="border-b border-line bg-white/90 backdrop-blur sticky top-0 z-30">
+    <div class="max-w-[1600px] mx-auto px-5 lg:px-8 h-16 flex items-center justify-between gap-4">
+      <div class="flex items-center gap-3 min-w-0">
+        <div class="w-9 h-9 rounded-lg bg-ink text-white grid place-items-center"><i class="fa fa-waveform" aria-hidden="true"></i></div>
+        <div class="min-w-0"><div class="font-semibold tracking-tight text-lg truncate">声迹</div><div class="text-[11px] text-slate-500 tracking-[.16em] uppercase">Video to text workspace</div></div>
+      </div>
+      <div class="flex items-center gap-3 text-sm">
+        <div id="serviceBadge" class="inline-flex items-center gap-2 rounded-full px-3 py-1.5 bg-amber-50 text-amber-700 border border-amber-200"><span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span><span>检测服务状态中</span></div>
+        <span id="appVersion" class="hidden sm:inline text-xs text-slate-400 font-mono">v—</span>
+        <button id="newJobBtn" class="focus-ring inline-flex items-center gap-2 rounded-md border border-line bg-white px-3 py-2 text-slate-700 hover:border-mint hover:text-mint transition" title="新建任务"><i class="fa fa-plus"></i><span class="hidden sm:inline">新建任务</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-[1600px] mx-auto px-5 lg:px-8 py-6">
+    <div class="grid grid-cols-1 xl:grid-cols-[248px_minmax(0,1fr)_300px] gap-5 items-start">
+      <aside class="space-y-4">
+        <div class="bg-white border border-line rounded-xl overflow-hidden">
+          <div class="px-4 py-3 border-b border-line flex justify-between items-center"><h2 class="font-semibold text-sm">任务</h2><span id="historyCount" class="text-xs text-slate-400">0 条</span></div>
+          <div id="historyList" class="divide-y divide-line max-h-[calc(100vh-180px)] overflow-auto"><div id="emptyHistory" class="px-4 py-8 text-center text-xs text-slate-400"><i class="fa fa-clock-o text-xl mb-2 block"></i>暂无任务</div></div>
+        </div>
+        <div class="rounded-xl bg-ink text-white p-4">
+          <div class="text-xs text-slate-300 mb-1">当前工作区</div><div class="font-medium">本地安全处理</div>
+          <div class="mt-3 h-px bg-white/15"></div><div class="mt-3 flex items-center gap-2 text-xs text-slate-300"><i class="fa fa-lock"></i><span>密钥仅在服务端使用</span></div>
+        </div>
+      </aside>
+
+      <section class="min-w-0 space-y-5">
+        <div id="uploadPanel" class="bg-white border border-line rounded-xl p-5 lg:p-7">
+          <div class="flex items-start justify-between gap-4 mb-5"><div><div class="text-xs text-mint font-medium tracking-wider uppercase">01 / 选择素材</div><h1 class="text-2xl lg:text-3xl font-semibold mt-1 tracking-tight">把画面里的声音变成文字</h1><p class="text-sm text-slate-500 mt-2">提取音频后使用高精度识别，可在结果中校对。</p></div><div class="hidden sm:block text-right text-xs text-slate-400">MP4 · MOV · AVI<br>MKV · WebM</div></div>
+          <div id="dropZone" class="border-2 border-dashed border-line rounded-lg bg-paper px-5 py-10 text-center cursor-pointer transition hover:border-mint hover:bg-emerald-50/30">
+            <input id="fileInput" type="file" class="hidden" accept="video/mp4,video/quicktime,video/x-msvideo,video/x-matroska,video/webm,.mp4,.mov,.avi,.mkv,.webm">
+            <div class="w-12 h-12 rounded-full bg-emerald-50 text-mint grid place-items-center mx-auto mb-3"><i class="fa fa-cloud-upload text-xl"></i></div>
+            <div class="font-medium">拖入视频文件，或点击选择</div><div class="text-xs text-slate-400 mt-2">单个文件不超过 2 GB · 最长 4 小时</div>
+            <div id="fileError" class="hidden text-sm text-clay mt-3"></div>
+          </div>
+          <div id="fileCard" class="hidden mt-4 rounded-lg border border-line bg-paper p-4">
+            <div class="flex gap-3 items-center"><div class="w-10 h-10 rounded bg-ink text-white grid place-items-center"><i class="fa fa-file-video-o"></i></div><div class="min-w-0 flex-1"><div id="fileName" class="font-medium truncate"></div><div id="fileMeta" class="text-xs text-slate-500 mt-1"></div></div><button id="removeFileBtn" class="w-8 h-8 rounded-md text-slate-400 hover:bg-white hover:text-clay" title="移除文件"><i class="fa fa-times"></i></button></div>
+            <video id="videoPreview" class="hidden w-full max-h-56 object-contain rounded mt-4 bg-black" controls preload="metadata"></video>
+          </div>
+          <div class="mt-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3"><div class="text-xs text-slate-400 flex items-center gap-2"><i class="fa fa-shield"></i><span>临时文件将在任务结束后清理</span></div><button id="startBtn" disabled class="focus-ring rounded-md bg-ink text-white px-5 py-2.5 font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-800 transition"><i class="fa fa-magic mr-2"></i>开始转写</button></div>
+        </div>
+
+        <div id="progressPanel" class="hidden bg-white border border-line rounded-xl p-5">
+          <div class="flex items-center justify-between gap-4 mb-5"><div><div class="text-xs text-mint font-medium tracking-wider uppercase">02 / 处理进度</div><h2 id="progressTitle" class="text-xl font-semibold mt-1">正在准备任务</h2></div><button id="cancelBtn" class="focus-ring text-sm text-slate-500 hover:text-clay"><i class="fa fa-stop-circle-o mr-1"></i>取消</button></div>
+          <div class="relative px-2"><div class="absolute left-5 right-5 top-4 h-0.5 bg-line"></div><div id="progressLine" class="absolute left-5 top-4 h-0.5 bg-mint progress-line" style="width:0%"></div><div class="relative grid grid-cols-4 gap-2"><div class="progress-step" data-step="extracting"><div class="step-dot w-8 h-8 rounded-full bg-white border-2 border-line grid place-items-center text-xs mx-auto"><i class="fa fa-volume-up"></i></div><div class="text-center text-xs mt-2 text-slate-500">提取音频</div></div><div class="progress-step" data-step="uploading"><div class="step-dot w-8 h-8 rounded-full bg-white border-2 border-line grid place-items-center text-xs mx-auto"><i class="fa fa-cloud-upload"></i></div><div class="text-center text-xs mt-2 text-slate-500">上传音频</div></div><div class="progress-step" data-step="transcribing"><div class="step-dot w-8 h-8 rounded-full bg-white border-2 border-line grid place-items-center text-xs mx-auto"><i class="fa fa-comments-o"></i></div><div class="text-center text-xs mt-2 text-slate-500">识别文字</div></div><div class="progress-step" data-step="completed"><div class="step-dot w-8 h-8 rounded-full bg-white border-2 border-line grid place-items-center text-xs mx-auto"><i class="fa fa-check"></i></div><div class="text-center text-xs mt-2 text-slate-500">完成</div></div></div></div>
+          <div class="mt-6 flex items-center gap-3"><div class="h-2 rounded-full meter flex-1" id="progressMeter" style="--value:0%"></div><span id="progressPercent" class="text-sm tabular-nums text-slate-500 w-10 text-right">0%</span></div><div id="progressHint" class="text-xs text-slate-400 mt-2">正在初始化...</div>
+        </div>
+
+        <div id="resultPanel" class="hidden bg-white border border-line rounded-xl overflow-hidden">
+          <div class="px-5 py-4 border-b border-line flex flex-col lg:flex-row lg:items-center justify-between gap-3"><div><div class="text-xs text-mint font-medium tracking-wider uppercase">03 / 校对结果</div><div class="flex items-center gap-3 mt-1"><h2 id="resultTitle" class="text-xl font-semibold">转写结果</h2><span id="resultMode" class="text-[11px] rounded-full px-2 py-1 bg-emerald-50 text-mint">演示模式</span></div></div><div class="flex items-center gap-2"><button id="saveBtn" class="focus-ring rounded-md border border-line px-3 py-2 text-sm hover:border-mint hover:text-mint"><i class="fa fa-save mr-1"></i>保存</button><div class="relative"><button id="exportBtn" class="focus-ring rounded-md bg-ink text-white px-3 py-2 text-sm hover:bg-slate-800"><i class="fa fa-download mr-1"></i>导出 <i class="fa fa-angle-down ml-1"></i></button><div id="exportMenu" class="hidden absolute z-20 right-0 mt-2 w-36 rounded-md border border-line bg-white shadow-lg overflow-hidden"><button data-export="txt" class="export-item w-full text-left px-3 py-2 text-sm hover:bg-paper">TXT 纯文本</button><button data-export="srt" class="export-item w-full text-left px-3 py-2 text-sm hover:bg-paper">SRT 字幕</button><button data-export="vtt" class="export-item w-full text-left px-3 py-2 text-sm hover:bg-paper">VTT 字幕</button><button data-export="json" class="export-item w-full text-left px-3 py-2 text-sm hover:bg-paper">JSON 数据</button></div></div></div></div>
+          <div class="p-5 border-b border-line bg-paper/60"><div class="flex flex-col md:flex-row gap-3"><div class="relative flex-1"><i class="fa fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i><input id="searchInput" class="focus-ring w-full rounded-md border border-line bg-white pl-9 pr-3 py-2 text-sm" placeholder="搜索转写内容"></div><label class="inline-flex items-center gap-2 text-sm text-slate-600 cursor-pointer"><input id="lowConfidenceOnly" type="checkbox" class="accent-[#20a080]">仅看低置信度</label><span id="matchCount" class="text-xs text-slate-400 self-center md:ml-auto">0 段</span></div></div>
+          <div id="segmentsList" class="divide-y divide-line max-h-[660px] overflow-auto"></div><div id="noSegments" class="hidden px-5 py-12 text-center text-slate-400 text-sm">没有匹配的段落</div>
+        </div>
+      </section>
+
+      <aside class="space-y-4">
+        <div class="bg-white border border-line rounded-xl p-4"><div class="flex items-center justify-between mb-4"><h2 class="font-semibold text-sm">识别设置</h2><span class="text-[11px] rounded-full bg-emerald-50 text-mint px-2 py-1">高精度</span></div>
+          <div class="space-y-4"><label class="block"><span class="text-xs text-slate-500">语言</span><select id="language" class="focus-ring mt-1.5 w-full rounded-md border border-line bg-white px-3 py-2 text-sm"><option value="zh">普通话</option><option value="en">英语</option><option value="yue">粤语</option><option value="ja">日语</option></select></label>
+            <div class="space-y-3"><div class="flex items-center justify-between"><span class="text-sm">自动标点</span><label class="switch relative inline-block w-10 h-5"><input id="punctuation" type="checkbox" checked class="sr-only"><span class="absolute inset-0 rounded-full bg-slate-300 transition"></span></label></div><div class="flex items-center justify-between"><span class="text-sm">数字规范化</span><label class="switch relative inline-block w-10 h-5"><input id="normalize" type="checkbox" checked class="sr-only"><span class="absolute inset-0 rounded-full bg-slate-300 transition"></span></label></div><div class="flex items-center justify-between"><span class="text-sm">时间戳</span><label class="switch relative inline-block w-10 h-5"><input id="timestamps" type="checkbox" checked class="sr-only"><span class="absolute inset-0 rounded-full bg-slate-300 transition"></span></label></div><div class="flex items-center justify-between"><span class="text-sm">词级结果</span><label class="switch relative inline-block w-10 h-5"><input id="wordLevel" type="checkbox" checked class="sr-only"><span class="absolute inset-0 rounded-full bg-slate-300 transition"></span></label></div><div class="flex items-center justify-between"><span class="text-sm">说话人识别</span><label class="switch relative inline-block w-10 h-5"><input id="speakers" type="checkbox" class="sr-only"><span class="absolute inset-0 rounded-full bg-slate-300 transition"></span></label></div></div>
+            <label id="speakerCountWrap" class="hidden block"><span class="text-xs text-slate-500">最大说话人数</span><input id="speakerCount" type="number" min="1" max="20" value="4" class="focus-ring mt-1.5 w-full rounded-md border border-line px-3 py-2 text-sm"></label>
+            <label class="block"><span class="text-xs text-slate-500">热词（可选）</span><input id="hotwords" type="text" class="focus-ring mt-1.5 w-full rounded-md border border-line px-3 py-2 text-sm" placeholder="用逗号分隔"></label>
+          </div>
+        </div>
+        <div class="bg-white border border-line rounded-xl p-4"><div class="flex items-center gap-2 mb-2"><i class="fa fa-server text-mint"></i><h2 class="font-semibold text-sm">服务状态</h2></div><div id="serviceDetail" class="text-xs text-slate-500 leading-5">正在检查服务端配置...</div><div class="mt-3 text-[11px] text-slate-400">AccessKey 不会在浏览器保存</div></div>
+        <div id="playerCard" class="hidden bg-ink text-white rounded-xl overflow-hidden"><div class="px-4 py-3 border-b border-white/10 flex justify-between items-center"><span class="text-sm font-medium">原始视频</span><span id="playerTime" class="text-xs text-slate-300 tabular-nums">00:00</span></div><video id="resultVideo" class="w-full aspect-video bg-black object-contain" controls></video><div class="px-4 py-3 text-xs text-slate-300">点击左侧段落可跳转播放位置</div></div>
+      </aside>
+    </div>
+  </main>
+  <div id="toast" class="fixed bottom-5 right-5 z-50 hidden max-w-sm rounded-lg bg-ink text-white px-4 py-3 text-sm shadow-xl"></div>
+
+  <script>
+    (() => {
+      const $ = (id) => document.getElementById(id);
+      const allowedExt = ['mp4', 'mov', 'avi', 'mkv', 'webm'];
+      const MAX_SIZE = 2 * 1024 * 1024 * 1024;
+      const MAX_DURATION = 4 * 60 * 60;
+      const stepIndex = { idle: 0, video_selected: 0, extracting: 1, uploading: 2, transcribing: 3, completed: 4 };
+      let state = { file: null, objectUrl: null, jobId: null, status: 'idle', poller: null, segments: [], savedSegments: [], demo: false, dirty: false };
+      let history = loadHistory();
+
+      function loadHistory() { try { return JSON.parse(localStorage.getItem('voice-trace-history') || '[]'); } catch (_) { return []; } }
+      function saveHistory() { localStorage.setItem('voice-trace-history', JSON.stringify(history.slice(0, 30))); renderHistory(); }
+      function showToast(message, tone = 'dark') { const el = $('toast'); el.textContent = message; el.className = `fixed bottom-5 right-5 z-50 max-w-sm rounded-lg px-4 py-3 text-sm shadow-xl ${tone === 'error' ? 'bg-clay text-white' : 'bg-ink text-white'}`; el.classList.remove('hidden'); clearTimeout(showToast.timer); showToast.timer = setTimeout(() => el.classList.add('hidden'), 3200); }
+      function escapeHtml(text) { return String(text ?? '').replace(/[&<>'"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;' }[c])); }
+      function formatBytes(bytes) { if (!bytes) return '0 B'; const units = ['B', 'KB', 'MB', 'GB']; const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1); return `${(bytes / Math.pow(1024, i)).toFixed(i ? 1 : 0)} ${units[i]}`; }
+      function formatTime(ms, comma = false) { const n = Math.max(0, Math.round(ms || 0)); const h = Math.floor(n / 3600000); const m = Math.floor((n % 3600000) / 60000); const s = Math.floor((n % 60000) / 1000); const x = n % 1000; const base = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`; return `${base}${comma ? ',' : '.'}${String(x).padStart(3, '0')}`; }
+      function formatShort(ms) { const n = Math.max(0, Math.round(ms || 0)); const m = Math.floor(n / 60000); const s = Math.floor((n % 60000) / 1000); return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`; }
+      function markText(text) { const query = $('searchInput').value.trim(); if (!query) return escapeHtml(text); const safe = escapeHtml(text); const q = escapeHtml(query).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); return safe.replace(new RegExp(q, 'gi'), m => `<mark>${m}</mark>`); }
+
+      function renderHistory() {
+        $('historyCount').textContent = `${history.length} 条`;
+        if (!history.length) { $('historyList').innerHTML = '<div id="emptyHistory" class="px-4 py-8 text-center text-xs text-slate-400"><i class="fa fa-clock-o text-xl mb-2 block"></i>暂无任务</div>'; return; }
+        $('historyList').innerHTML = history.map(item => `<button class="history-item w-full text-left px-4 py-3 hover:bg-paper transition ${item.id === state.jobId ? 'bg-emerald-50/60' : ''}" data-id="${escapeHtml(item.id)}"><div class="flex items-start gap-2"><i class="fa fa-file-video-o text-slate-400 mt-0.5"></i><div class="min-w-0 flex-1"><div class="text-sm font-medium truncate">${escapeHtml(item.name || '未命名视频')}</div><div class="text-[11px] text-slate-400 mt-1">${escapeHtml(item.date || '')}</div></div><span class="w-1.5 h-1.5 rounded-full mt-1.5 ${item.status === 'completed' ? 'bg-mint' : item.status === 'error' ? 'bg-clay' : 'bg-slate-300'}"></span></div></button>`).join('');
+        document.querySelectorAll('.history-item').forEach(btn => btn.addEventListener('click', () => loadHistoryJob(btn.dataset.id)));
+      }
+
+      async function loadHistoryJob(id) {
+        const item = history.find(x => x.id === id); if (!item) return;
+        state.jobId = id; state.status = item.status || 'completed'; state.demo = !!item.demo; state.segments = item.segments || []; state.savedSegments = JSON.parse(JSON.stringify(state.segments)); state.file = null; state.dirty = false;
+        $('uploadPanel').classList.add('hidden'); $('progressPanel').classList.add('hidden'); $('resultPanel').classList.remove('hidden'); $('resultMode').textContent = state.demo ? '演示模式' : '已保存'; $('resultTitle').textContent = item.name || '转写结果'; renderSegments(); renderHistory();
+        showToast('已载入历史任务');
+      }
+
+      function validateFile(file) {
+        const ext = file.name.split('.').pop().toLowerCase();
+        if (!allowedExt.includes(ext)) return '暂不支持该格式，请选择 MP4、MOV、AVI、MKV 或 WebM。';
+        if (file.size > MAX_SIZE) return '文件超过 2 GB 限制。';
+        return '';
+      }
+      function selectFile(file) {
+        const error = validateFile(file); $('fileError').classList.toggle('hidden', !error); $('fileError').textContent = error; if (error) { state.file = null; $('fileCard').classList.add('hidden'); $('startBtn').disabled = true; return; }
+        if (state.objectUrl) URL.revokeObjectURL(state.objectUrl); state.file = file; state.objectUrl = URL.createObjectURL(file); $('fileName').textContent = file.name; $('fileMeta').textContent = `${formatBytes(file.size)} · 正在读取时长`; $('fileCard').classList.remove('hidden'); $('startBtn').disabled = false; $('videoPreview').src = state.objectUrl; $('videoPreview').classList.remove('hidden'); $('videoPreview').onloadedmetadata = () => { const d = $('videoPreview').duration; if (Number.isFinite(d) && d > MAX_DURATION) { $('fileMeta').textContent = `${formatBytes(file.size)} · ${formatDuration(d)}`; $('fileError').textContent = '视频超过 4 小时限制。'; $('fileError').classList.remove('hidden'); $('startBtn').disabled = true; } else { $('fileMeta').textContent = `${formatBytes(file.size)} · ${Number.isFinite(d) ? formatDuration(d) : '时长未知'}`; } }; }
+      function formatDuration(seconds) { const h = Math.floor(seconds / 3600); const m = Math.floor((seconds % 3600) / 60); const s = Math.floor(seconds % 60); return h ? `${h} 小时 ${m} 分钟` : `${m} 分 ${s} 秒`; }
+      function clearFile() { if (state.objectUrl) URL.revokeObjectURL(state.objectUrl); state.file = null; state.objectUrl = null; $('fileCard').classList.add('hidden'); $('fileInput').value = ''; $('startBtn').disabled = true; $('fileError').classList.add('hidden'); }
+
+      function readOptions() { return { language: $('language').value, punctuation: $('punctuation').checked, normalizeNumbers: $('normalize').checked, timestamps: $('timestamps').checked, wordLevel: $('wordLevel').checked, speakerDiarization: $('speakers').checked, maxSpeakers: Number($('speakerCount').value) || 4, hotwords: $('hotwords').value.split(/[,，]/).map(x => x.trim()).filter(Boolean) }; }
+      function setStatus(status, progress, hint) { state.status = status; const current = stepIndex[status] ?? 0; $('progressPercent').textContent = `${Math.round(progress || 0)}%`; $('progressMeter').style.setProperty('--value', `${Math.max(0, Math.min(100, progress || 0))}%`); $('progressLine').style.width = `${Math.max(0, Math.min(100, (Math.max(current - 1, 0) / 3) * 100))}%`; $('progressHint').textContent = hint || ''; const titles = { extracting: '正在提取音频', uploading: '正在上传音频', transcribing: '正在识别文字', completed: '转写完成', error: '任务失败', cancelled: '任务已取消' }; $('progressTitle').textContent = titles[status] || '正在准备任务'; document.querySelectorAll('.progress-step').forEach(el => { const i = stepIndex[el.dataset.step] || 0; const dot = el.querySelector('.step-dot'); dot.classList.toggle('border-mint', i <= current); dot.classList.toggle('bg-mint', i < current || status === 'completed' && i === 4); dot.classList.toggle('text-white', i < current || status === 'completed' && i === 4); dot.classList.toggle('text-slate-400', i > current); }); if (status === 'completed') { $('progressLine').style.width = '100%'; $('cancelBtn').classList.add('hidden'); } else $('cancelBtn').classList.remove('hidden'); }
+
+      function demoSegments() { return [{ startMs: 0, endMs: 5200, speaker: '说话人 1', text: '欢迎使用声迹视频音频转文本工作台。', confidence: .98, words: [] }, { startMs: 5500, endMs: 11200, speaker: '说话人 1', text: '我们会先把视频中的音频提取出来，再交给高精度语音识别服务。', confidence: .94, words: [] }, { startMs: 11800, endMs: 16800, speaker: '说话人 2', text: '识别完成后，你可以直接在这里校对文本，并导出字幕文件。', confidence: .88, words: [] }, { startMs: 17300, endMs: 22000, speaker: '说话人 1', text: '低置信度的片段会被标记，方便快速检查。', confidence: .71, words: [] }]; }
+      async function startJob() {
+        if (!state.file || state.status === 'extracting' || state.status === 'uploading' || state.status === 'transcribing') return;
+        $('startBtn').disabled = true; $('uploadPanel').classList.add('hidden'); $('progressPanel').classList.remove('hidden'); $('resultPanel').classList.add('hidden'); setStatus('extracting', 8, '正在读取视频并检查音轨...');
+        const form = new FormData(); form.append('video', state.file); form.append('options', JSON.stringify(readOptions()));
+        try { const response = await fetch('/api/jobs', { method: 'POST', body: form }); if (!response.ok) throw new Error(`HTTP ${response.status}`); const data = await response.json(); state.jobId = data.jobId || data.id; state.demo = Boolean(data.demoMode ?? state.demo); if (!state.jobId) throw new Error('服务端未返回任务 ID'); beginPolling(); }
+        catch (err) { console.info('进入演示模式:', err.message); state.demo = true; state.jobId = `demo-${Date.now()}`; setStatus('extracting', 24, '演示任务：音频轨道已准备'); runDemo(); }
+      }
+      function runDemo() { let n = 0; const stages = [['extracting', 28, '已提取 16 kHz 单声道音频'], ['uploading', 52, '已生成临时安全链接'], ['transcribing', 78, '高精度模型正在识别，预计还需片刻'], ['completed', 100, '演示转写已完成']]; clearInterval(state.poller); state.poller = setInterval(() => { const x = stages[n++]; if (!x) { clearInterval(state.poller); state.segments = demoSegments(); state.savedSegments = JSON.parse(JSON.stringify(state.segments)); finishJob(); return; } setStatus(x[0], x[1], x[2]); if (x[0] === 'completed') { clearInterval(state.poller); setTimeout(() => { state.segments = demoSegments(); state.savedSegments = JSON.parse(JSON.stringify(state.segments)); finishJob(); }, 450); } }, 1100); }
+      function beginPolling() { clearInterval(state.poller); state.poller = setInterval(async () => { try { const response = await fetch(`/api/jobs/${encodeURIComponent(state.jobId)}`); if (!response.ok) throw new Error('状态请求失败'); const data = await response.json(); const status = data.status || data.stage || 'transcribing'; setStatus(status, data.progress || (status === 'extracting' ? 25 : status === 'uploading' ? 50 : status === 'completed' ? 100 : 75), data.message || '正在处理...'); if (status === 'completed') { clearInterval(state.poller); state.segments = normalizeSegments(data.result?.segments || data.segments || []); state.savedSegments = JSON.parse(JSON.stringify(state.segments)); state.demo = Boolean(data.demoMode ?? state.demo); finishJob(); } else if (['error', 'cancelled'].includes(status)) { clearInterval(state.poller); showToast(data.error || (status === 'cancelled' ? '任务已取消' : '任务处理失败'), 'error'); $('startBtn').disabled = false; } } catch (err) { clearInterval(state.poller); showToast('无法读取任务状态，请检查服务端', 'error'); $('startBtn').disabled = false; } }, 3000); }
+      function normalizeSegments(list) { return (Array.isArray(list) ? list : []).map((x, i) => ({ startMs: Number(x.startMs ?? x.start ?? 0), endMs: Number(x.endMs ?? x.end ?? 0), speaker: x.speaker || x.speakerId || '', text: String(x.text ?? x.content ?? ''), confidence: x.confidence == null ? null : Number(x.confidence), words: x.words || [] })); }
+      function finishJob() { setStatus('completed', 100, state.demo ? '演示任务已完成，可继续编辑并导出' : '识别完成，可继续编辑并导出'); $('progressPanel').classList.add('hidden'); $('resultPanel').classList.remove('hidden'); $('resultMode').textContent = state.demo ? '演示模式' : '阿里云识别'; $('resultTitle').textContent = state.file?.name || history.find(x => x.id === state.jobId)?.name || '转写结果'; renderSegments(); saveHistoryEntry(); if (state.file && state.objectUrl) { $('resultVideo').src = state.objectUrl; $('playerCard').classList.remove('hidden'); } }
+      function saveHistoryEntry() { const existing = history.find(x => x.id === state.jobId); const item = { id: state.jobId, name: state.file?.name || existing?.name || '未命名视频', date: new Date().toLocaleString('zh-CN', { hour12: false }), status: 'completed', demo: state.demo, segments: state.segments }; if (existing) Object.assign(existing, item); else history.unshift(item); saveHistory(); }
+
+      function renderSegments() { const query = $('searchInput').value.trim().toLowerCase(); const onlyLow = $('lowConfidenceOnly').checked; const rows = state.segments.map((seg, index) => ({ seg, index })).filter(({ seg }) => (!onlyLow || (seg.confidence != null && seg.confidence < .8)) && (!query || seg.text.toLowerCase().includes(query))); $('matchCount').textContent = `${rows.length} 段`; $('noSegments').classList.toggle('hidden', rows.length !== 0); $('segmentsList').innerHTML = rows.map(({ seg, index }) => { const low = seg.confidence != null && seg.confidence < .8; const confidence = seg.confidence == null ? '未提供' : `${Math.round(seg.confidence * 100)}%`; return `<div class="segment-row ${low ? 'is-low' : ''} border-l-2 border-transparent px-5 py-4 transition hover:bg-paper" data-index="${index}"><div class="flex items-start gap-3"><button class="seek-btn shrink-0 mt-0.5 text-xs tabular-nums text-slate-400 hover:text-mint" data-index="${index}" title="跳转到此处">${formatShort(seg.startMs)}</button><div class="min-w-0 flex-1"><div class="flex items-center gap-2 mb-2">${seg.speaker ? `<span class="text-[11px] rounded px-1.5 py-0.5 bg-slate-100 text-slate-500">${escapeHtml(seg.speaker)}</span>` : ''}<span class="text-[11px] ${low ? 'text-clay' : 'text-slate-400'}"><i class="fa fa-circle text-[7px] mr-1"></i>${confidence}</span>${low ? '<span class="text-[11px] text-clay">需校对</span>' : ''}</div><textarea class="segment-input focus-ring w-full min-h-[42px] rounded-md border border-transparent bg-transparent px-2 py-1.5 text-sm leading-6 hover:border-line focus:border-mint" data-index="${index}">${escapeHtml(seg.text)}</textarea><div class="text-[11px] text-slate-400 mt-1">${formatShort(seg.startMs)} - ${formatShort(seg.endMs)}</div></div></div></div>`; }).join(''); document.querySelectorAll('.segment-input').forEach(input => input.addEventListener('input', onSegmentInput)); document.querySelectorAll('.seek-btn').forEach(btn => btn.addEventListener('click', () => seekTo(Number(btn.dataset.index)))); document.querySelectorAll('.segment-row').forEach(row => row.addEventListener('click', e => { if (!e.target.closest('textarea') && !e.target.closest('button')) seekTo(Number(row.dataset.index)); })); }
+      function onSegmentInput(e) { const i = Number(e.target.dataset.index); state.segments[i].text = e.target.value; state.dirty = true; clearTimeout(onSegmentInput.timer); onSegmentInput.timer = setTimeout(() => saveResult(true), 1000); }
+      function seekTo(index) { const seg = state.segments[index]; if (!seg) return; const video = $('resultVideo'); if (video.src) { video.currentTime = seg.startMs / 1000; video.play().catch(() => {}); } document.querySelectorAll('.segment-row').forEach(r => r.classList.remove('is-selected')); document.querySelector(`.segment-row[data-index="${index}"]`)?.classList.add('is-selected'); }
+      async function saveResult(silent = false) { if (!state.jobId || !state.dirty) { if (!silent) showToast('没有需要保存的修改'); return true; } try { if (!state.demo) { const res = await fetch(`/api/jobs/${encodeURIComponent(state.jobId)}/result`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ segments: state.segments }) }); if (!res.ok) throw new Error('保存失败'); } state.savedSegments = JSON.parse(JSON.stringify(state.segments)); state.dirty = false; saveHistoryEntry(); if (!silent) showToast('已保存'); return true; } catch (_) { if (!silent) showToast('保存失败，请稍后重试', 'error'); return false; } }
+      function buildExport(format) { const segs = state.segments; if (format === 'json') return { content: JSON.stringify({ jobId: state.jobId, segments: segs }, null, 2), type: 'application/json;charset=utf-8', ext: 'json' }; if (format === 'txt') return { content: segs.map(s => `${s.speaker ? `[${s.speaker}] ` : ''}${s.text}`).join('\n\n'), type: 'text/plain;charset=utf-8', ext: 'txt' }; if (format === 'vtt') return { content: `WEBVTT\n\n${segs.map((s, i) => `${formatTime(s.startMs)} --> ${formatTime(s.endMs)}\n${s.speaker ? `${s.speaker}: ` : ''}${s.text}`).join('\n\n')}`, type: 'text/vtt;charset=utf-8', ext: 'vtt' }; return { content: segs.map((s, i) => `${i + 1}\n${formatTime(s.startMs, true)} --> ${formatTime(s.endMs, true)}\n${s.speaker ? `${s.speaker}: ` : ''}${s.text}`).join('\n\n'), type: 'application/x-subrip;charset=utf-8', ext: 'srt' }; }
+      async function exportResult(format) { $('exportMenu').classList.add('hidden'); if (!(await saveResult(true))) return; try { if (!state.demo) { const res = await fetch(`/api/jobs/${encodeURIComponent(state.jobId)}/export?format=${format}`); if (res.ok) { const blob = await res.blob(); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${safeName(state.file?.name || 'transcript')}.${format}`; a.click(); URL.revokeObjectURL(a.href); return; } } } catch (_) {} const out = buildExport(format); const blob = new Blob([out.content], { type: out.type }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${safeName(state.file?.name || 'transcript')}.${out.ext}`; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href); showToast(`已导出 ${format.toUpperCase()} 文件`); }
+      function safeName(name) { return String(name).replace(/\.[^.]+$/, '').replace(/[\\/:*?"<>|]/g, '_') || 'transcript'; }
+      async function cancelJob() { if (!state.jobId) return; clearInterval(state.poller); try { if (!String(state.jobId).startsWith('demo-')) await fetch(`/api/jobs/${encodeURIComponent(state.jobId)}/cancel`, { method: 'POST' }); } catch (_) {} state.status = 'cancelled'; $('progressPanel').classList.add('hidden'); $('uploadPanel').classList.remove('hidden'); $('startBtn').disabled = !state.file; showToast('任务已取消'); }
+      function resetWorkspace() { clearInterval(state.poller); state.jobId = null; state.status = 'idle'; state.segments = []; state.savedSegments = []; state.dirty = false; clearFile(); $('progressPanel').classList.add('hidden'); $('resultPanel').classList.add('hidden'); $('uploadPanel').classList.remove('hidden'); $('playerCard').classList.add('hidden'); $('resultVideo').removeAttribute('src'); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+
+      async function checkService() { try { const res = await fetch('/api/config'); if (!res.ok) throw new Error(); const data = await res.json(); const demo = data.demoMode ?? data.demo; state.demo = !!demo; $('serviceBadge').className = `inline-flex items-center gap-2 rounded-full px-3 py-1.5 ${demo ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-emerald-50 text-mint border border-emerald-200'}`; $('serviceBadge').innerHTML = `<span class="w-1.5 h-1.5 rounded-full ${demo ? 'bg-amber-500' : 'bg-mint'}"></span><span>${demo ? '演示模式' : '阿里云服务已连接'}</span>`; $('serviceDetail').textContent = demo ? '未配置阿里云密钥，将使用演示任务。' : '阿里云识别服务已配置，任务将使用服务端凭据。'; } catch (_) { $('serviceBadge').className = 'inline-flex items-center gap-2 rounded-full px-3 py-1.5 bg-amber-50 text-amber-700 border border-amber-200'; $('serviceBadge').innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span><span>演示模式</span>'; $('serviceDetail').textContent = '服务端配置未返回，提交失败时会自动进入演示任务。'; } }
+
+      $('dropZone').addEventListener('click', () => $('fileInput').click()); $('fileInput').addEventListener('change', e => e.target.files[0] && selectFile(e.target.files[0])); ['dragenter', 'dragover'].forEach(type => $('dropZone').addEventListener(type, e => { e.preventDefault(); $('dropZone').classList.add('drop-active'); })); ['dragleave', 'drop'].forEach(type => $('dropZone').addEventListener(type, e => { e.preventDefault(); $('dropZone').classList.remove('drop-active'); })); $('dropZone').addEventListener('drop', e => e.dataTransfer.files[0] && selectFile(e.dataTransfer.files[0])); $('removeFileBtn').addEventListener('click', e => { e.stopPropagation(); clearFile(); }); $('startBtn').addEventListener('click', startJob); $('cancelBtn').addEventListener('click', cancelJob); $('newJobBtn').addEventListener('click', resetWorkspace); $('saveBtn').addEventListener('click', () => saveResult(false)); $('searchInput').addEventListener('input', renderSegments); $('lowConfidenceOnly').addEventListener('change', renderSegments); $('exportBtn').addEventListener('click', () => $('exportMenu').classList.toggle('hidden')); document.querySelectorAll('.export-item').forEach(btn => btn.addEventListener('click', () => exportResult(btn.dataset.export))); $('speakers').addEventListener('change', e => $('speakerCountWrap').classList.toggle('hidden', !e.target.checked)); $('resultVideo').addEventListener('timeupdate', e => $('playerTime').textContent = formatShort(e.target.currentTime * 1000)); document.addEventListener('click', e => { if (!e.target.closest('#exportBtn') && !e.target.closest('#exportMenu')) $('exportMenu').classList.add('hidden'); });
+      renderHistory(); checkService(); fetch('/api/config').then(response => response.json()).then(data => { if (data.version) $('appVersion').textContent = 'v' + data.version; }).catch(() => {});
+    })();
+  </script>
+</body>
+</html>
